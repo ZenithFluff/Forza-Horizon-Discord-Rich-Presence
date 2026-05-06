@@ -153,9 +153,15 @@ fn main() {
                 let db_clone = db.clone();
                 let discord_clone = discord_service.clone();
                 tauri::async_runtime::spawn(async move {
+                    let mut last_update = tokio::time::Instant::now();
+                    
                     while let Ok(data) = rx.recv().await {
-                        let db_lock = db_clone.lock().unwrap();
-                        discord_clone.update_presence(&data, &db_lock);
+                        // Rate limit Discord updates to once per second
+                        if last_update.elapsed() >= Duration::from_millis(1000) {
+                            let db_lock = db_clone.lock().unwrap();
+                            discord_clone.update_presence(&data, &db_lock);
+                            last_update = tokio::time::Instant::now();
+                        }
                     }
                 });
 
