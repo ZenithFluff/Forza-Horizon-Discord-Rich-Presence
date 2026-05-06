@@ -43,41 +43,60 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       // Call Rust backend command
       await invoke("fix_uwp_isolation");
-      uwpSuccess.classList.remove("hidden");
-      uwpSuccess.textContent = "Fixed successfully!";
+      fixUwpBtn.textContent = "Fixed!";
       fixUwpBtn.classList.add("hidden");
+      uwpSuccess.classList.remove("hidden");
+      uwpSuccess.textContent = "Network fixed";
       localStorage.setItem("uwp_fixed", "true");
     } catch (error) {
       console.error(error);
-      uwpError.textContent = `Error: ${error}`;
-      uwpError.classList.remove("hidden");
-    } finally {
-      fixUwpBtn.disabled = false;
-      fixUwpBtn.textContent = "Fix Network";
+      fixUwpBtn.textContent = "Error";
+      setTimeout(() => { fixUwpBtn.textContent = "Fix Network"; fixUwpBtn.disabled = false; }, 3000);
     }
   });
 
   // Check DB Updates Button
   updateDbBtn.addEventListener("click", async () => {
     updateDbBtn.disabled = true;
-    dbSuccess.classList.add("hidden");
     
     // Animate button
     updateDbBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: rotateBg 2s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking...`;
 
     try {
-      const result = await invoke("check_db_updates");
-      dbSuccess.textContent = result;
-      dbSuccess.classList.remove("hidden");
+      await invoke("check_db_updates");
+      updateDbBtn.textContent = "Updated!";
+      setTimeout(() => { updateDbBtn.textContent = "Update Cars"; updateDbBtn.disabled = false; }, 3000);
     } catch (error) {
       console.error(error);
-      dbSuccess.textContent = `Error: ${error}`;
-      dbSuccess.classList.remove("hidden");
-      dbSuccess.style.color = "var(--error-color)";
-    } finally {
-      updateDbBtn.disabled = false;
-      updateDbBtn.textContent = `Update Cars`;
+      updateDbBtn.textContent = "Error";
+      setTimeout(() => { updateDbBtn.textContent = "Update Cars"; updateDbBtn.disabled = false; }, 3000);
     }
+  });
+
+  // Start Minimized Setting
+  const startMinimizedCheck = document.getElementById("start-minimized-check");
+  
+  // Default values
+  const hasRunBefore = localStorage.getItem("has_run_before");
+  let startMinimized = localStorage.getItem("start_minimized");
+
+  if (startMinimized === null) {
+    startMinimized = "true";
+    localStorage.setItem("start_minimized", "true");
+  }
+
+  startMinimizedCheck.checked = startMinimized === "true";
+
+  if (!hasRunBefore) {
+    // First run: keep window visible
+    localStorage.setItem("has_run_before", "true");
+  } else if (startMinimized === "true") {
+    // Not first run and setting is on: hide
+    invoke("hide_window").catch(console.error);
+  }
+
+  startMinimizedCheck.addEventListener("change", (e) => {
+    localStorage.setItem("start_minimized", e.target.checked.toString());
   });
 
   // Listen for status updates from Rust backend

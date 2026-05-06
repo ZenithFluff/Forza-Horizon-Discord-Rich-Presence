@@ -11,8 +11,8 @@
     "windows": [
       {
         "title": "Forza Horizon RPC Settings",
-        "width": 360,
-        "height": 530,
+        "width": 500,
+        "height": 220,
         "resizable": false
       }
     ],

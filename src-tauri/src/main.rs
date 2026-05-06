@@ -81,6 +81,11 @@ fn ui_ready() {
     // Frontend is ready to receive status updates
 }
 
+#[tauri::command]
+fn hide_window(window: tauri::Window) {
+    let _ = window.hide();
+}
+
 fn create_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let show_i = MenuItem::with_id(app, "show", "Settings", true, None::<&str>)?;
@@ -122,11 +127,6 @@ fn main() {
         .setup(|app| {
             create_tray(app)?;
             
-            // Hide window on start to run in background
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.hide();
-            }
-
             let app_handle = app.handle().clone();
             
             let db = Arc::new(Mutex::new(CarDatabase::new(&app_handle)));
@@ -217,6 +217,7 @@ fn main() {
             fix_uwp_isolation,
             check_uwp_status,
             check_db_updates,
+            hide_window,
             ui_ready
         ])
         .run(tauri::generate_context!())

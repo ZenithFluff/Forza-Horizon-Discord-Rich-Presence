@@ -12,7 +12,7 @@
 <body>
   <div class="app-root">
     <div class="panel-area">
-      <header>
+      <header class="hidden">
         <div class="logo-container">
           <img src="assets/logo.png" alt="Logo" class="logo" id="app-logo" />
           <div class="header-text">
@@ -22,31 +22,41 @@
       </header>
 
       <main>
-        <section class="card">
+        <!-- Top: Status (Full Width) -->
+        <section class="card status-card">
           <div class="status-header">
-            <h2>Status</h2>
-            <div class="status-indicator" id="status-indicator">
-              <span class="pulse-dot"></span>
-              <span class="status-text" id="status-text">Waiting...</span>
+            <div class="status-info">
+              <span class="status-label">FORZA RPC</span>
+              <div class="status-indicator" id="status-indicator">
+                <span class="pulse-dot"></span>
+                <span class="status-text" id="status-text">Waiting...</span>
+              </div>
             </div>
+            <p class="status-detail" id="status-detail">Launch game to broadcast</p>
           </div>
-          <p class="status-detail" id="status-detail">Launch game to broadcast</p>
         </section>
 
-        <section class="card">
-          <h2>UWP Fix</h2>
-          <p class="action-desc">Required for telemetry.</p>
-          <button id="fix-uwp-btn" class="primary-btn">Fix Network</button>
-          <p class="success-msg hidden" id="uwp-success">Fixed successfully!</p>
-          <p class="error-msg hidden" id="uwp-error">Failed.</p>
-        </section>
+        <!-- Bottom: Actions Row -->
+        <div class="actions-row">
+          <section class="card action-card">
+            <button id="fix-uwp-btn" class="primary-btn">Fix Network</button>
+            <p class="success-msg hidden" id="uwp-success">Network fixed</p>
+          </section>
 
-        <section class="card">
-          <h2>Database</h2>
-          <p class="action-desc">Update cars from GitHub.</p>
-          <button id="update-db-btn" class="secondary-btn">Update Cars</button>
-          <p class="success-msg hidden" id="db-success">Up to date.</p>
-        </section>
+          <section class="card action-card">
+            <button id="update-db-btn" class="secondary-btn">Update Cars</button>
+          </section>
+
+          <section class="card action-card mini-card">
+            <div class="setting-item">
+              <label class="checkbox-container">
+                <input type="checkbox" id="start-minimized-check">
+                <span class="checkmark"></span>
+                <span class="label-text">Launch Minimized</span>
+              </label>
+            </div>
+          </section>
+        </div>
       </main>
 
       <footer>
