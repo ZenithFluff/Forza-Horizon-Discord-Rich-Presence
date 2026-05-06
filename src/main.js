@@ -19,14 +19,14 @@ document.addEventListener("DOMContentLoaded", () => {
   async function checkUwpStatus() {
     try {
       const isFixedBackend = await invoke("check_uwp_status");
-      const isFixedLocal = localStorage.getItem("uwp_fixed") === "true";
+      const isFixedLocal = localStorage.getItem("uwp_fixed_v2") === "true";
 
       if (isFixedBackend || isFixedLocal) {
         fixUwpBtn.classList.add("hidden");
         if (uwpHint) uwpHint.classList.add("hidden");
         uwpSuccess.classList.remove("hidden");
         uwpSuccess.textContent = "Network already fixed";
-        uwpError.classList.add("hidden");
+        if (uwpError) uwpError.classList.add("hidden");
       }
     } catch (e) {
       console.error("Failed to check UWP status", e);
@@ -38,8 +38,8 @@ document.addEventListener("DOMContentLoaded", () => {
   fixUwpBtn.addEventListener("click", async () => {
     fixUwpBtn.disabled = true;
     fixUwpBtn.textContent = "Fixing...";
-    uwpSuccess.classList.add("hidden");
-    uwpError.classList.add("hidden");
+    if (uwpSuccess) uwpSuccess.classList.add("hidden");
+    if (uwpError) uwpError.classList.add("hidden");
 
     try {
       // Call Rust backend command
@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (uwpHint) uwpHint.classList.add("hidden");
       uwpSuccess.classList.remove("hidden");
       uwpSuccess.textContent = "Network fixed";
-      localStorage.setItem("uwp_fixed", "true");
+      localStorage.setItem("uwp_fixed_v2", "true");
     } catch (error) {
       console.error(error);
       fixUwpBtn.textContent = "Error";

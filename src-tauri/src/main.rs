@@ -26,26 +26,67 @@ struct AppState {
 }
 
 #[tauri::command]
-async fn fix_uwp_isolation(state: tauri::State<'_, AppState>) -> Result<String, String> {
+fn fix_uwp_isolation(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let mut needs_uac = false;
+
+    // First try direct execution (works if app is already running as Admin)
     for module in &state.modules {
         let package_name = module.uwp_package_name();
         if package_name.is_empty() { continue; }
-        
-        // Command to exempt UWP app from loopback isolation.
-        let status = std::process::Command::new("powershell")
-            .args(&[
-                "-Command",
-                &format!("Start-Process -FilePath 'CheckNetIsolation.exe' -ArgumentList 'LoopbackExempt -a -n={}' -Verb RunAs -WindowStyle Hidden", package_name)
-            ])
-            .status()
-            .map_err(|e| e.to_string())?;
 
-        if !status.success() {
-            return Err(format!("Failed to fix isolation for {}", module.game_name()));
+        let cmd_str = format!("CheckNetIsolation LoopbackExempt -a -n={}", package_name);
+        let status = std::process::Command::new("cmd")
+            .args(&["/c", &cmd_str])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
+        if let Ok(exit_status) = status {
+            if !exit_status.success() {
+                needs_uac = true;
+                break;
+            }
+        } else {
+            needs_uac = true;
+            break;
         }
     }
+
+    if !needs_uac {
+        return Ok("Isolation fixed directly".into());
+    }
+
+    // Fallback to PowerShell UAC (Silent)
+    let mut script = String::new();
+    for module in &state.modules {
+        let package_name = module.uwp_package_name();
+        if package_name.is_empty() { continue; }
+        if !script.is_empty() {
+            script.push_str(" & ");
+        }
+        script.push_str(&format!("CheckNetIsolation LoopbackExempt -a -n={}", package_name));
+    }
+
+    let status = std::process::Command::new("powershell")
+        .args(&[
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle", "Hidden",
+            "-Command",
+            &format!("Start-Process -FilePath 'cmd.exe' -ArgumentList '/c {}' -Verb RunAs -Wait -WindowStyle Hidden", script)
+        ])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|e| e.to_string())?;
+
+    if !status.success() {
+        return Err("Failed to fix isolation (UAC denied or command failed)".into());
+    }
     
-    Ok("Isolation fixed for all supported games".into())
+    Ok("Isolation fixed via UAC".into())
 }
 
 #[tauri::command]
@@ -54,7 +95,7 @@ async fn check_db_updates(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn check_uwp_status(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+fn check_uwp_status(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     let output = std::process::Command::new("CheckNetIsolation")
         .arg("LoopbackExempt")
         .arg("-s")
@@ -257,11 +298,17 @@ fn main() {
                             
                             tauri::async_runtime::spawn(async move {
                                 let mut last_update = tokio::time::Instant::now();
-                                while let Ok(data) = rx_clone.recv().await {
-                                    if last_update.elapsed() >= Duration::from_millis(2000) {
-                                        let db_lock = db_clone.lock().unwrap();
-                                        discord_service.update_presence(&data, &db_lock, module_clone.as_ref());
-                                        last_update = tokio::time::Instant::now();
+                                loop {
+                                    match rx_clone.recv().await {
+                                        Ok(data) => {
+                                            if last_update.elapsed() >= Duration::from_millis(2000) {
+                                                let db_lock = db_clone.lock().unwrap();
+                                                discord_service.update_presence(&data, &db_lock, module_clone.as_ref());
+                                                last_update = tokio::time::Instant::now();
+                                            }
+                                        }
+                                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                                     }
                                 }
                             });

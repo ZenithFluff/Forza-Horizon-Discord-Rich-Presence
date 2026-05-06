@@ -300,6 +300,7 @@ button:hover:not(:disabled) {
   font-weight: 500;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding-top: 0.2rem;
 }

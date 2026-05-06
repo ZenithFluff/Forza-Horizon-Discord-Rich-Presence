@@ -12,7 +12,7 @@ impl GameModule for FH5Module {
     }
 
     fn uwp_package_name(&self) -> &'static str {
-        "Microsoft.624F8BCE84CBE_8wekyb3d8bbwe"
+        "Microsoft.624F8B84B80_8wekyb3d8bbwe"
     }
 
     fn game_name(&self) -> &'static str {
