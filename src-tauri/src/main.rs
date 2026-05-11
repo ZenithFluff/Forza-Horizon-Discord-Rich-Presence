@@ -5,6 +5,7 @@ mod database;
 mod discord;
 mod modules;
 mod telemetry;
+mod xbl;
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -23,6 +24,7 @@ use telemetry::{TelemetryServer, TelemetryData};
 struct AppState {
     modules: Vec<Arc<dyn GameModule>>,
     active_game: Arc<Mutex<Option<String>>>,
+    xbl_api_key: Arc<Mutex<String>>,
 }
 
 #[tauri::command]
@@ -137,6 +139,11 @@ fn ui_ready(app: tauri::AppHandle, state: tauri::State<'_, AppState>) {
 }
 
 #[tauri::command]
+fn update_xbl_settings(api_key: String, state: tauri::State<'_, AppState>) {
+    *state.xbl_api_key.lock().unwrap() = api_key;
+}
+
+#[tauri::command]
 fn toggle_autostart(enable: bool) -> Result<String, String> {
     let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_path_str = exe_path.to_str().unwrap_or_default();
@@ -238,14 +245,17 @@ fn main() {
             ];
 
             let active_game = Arc::new(Mutex::new(None));
+            let xbl_api_key = Arc::new(Mutex::new(String::new()));
             
             app.manage(AppState {
                 modules: modules.clone(),
                 active_game: active_game.clone(),
+                xbl_api_key: xbl_api_key.clone(),
             });
 
             // Start background monitor task
             let app_handle_clone = app_handle.clone();
+            let xbl_api_key_clone = xbl_api_key.clone();
             
             tauri::async_runtime::spawn(async move {
                 let mut sys = System::new();
@@ -288,8 +298,45 @@ fn main() {
                             let _ = app_handle_clone.emit("status_update", serde_json::json!({
                                 "status": "connected",
                                 "game": module.game_name(),
-                                "details": "Broadcasting presence..."
+                                "details": "Broadcasting presence...",
+                                "xbl_status": "Connecting..."
                             }));
+                            
+                            let xbl_status = Arc::new(Mutex::new(None::<String>));
+                            let xbl_status_clone_loop = xbl_status.clone();
+                            let key_clone = xbl_api_key_clone.clone();
+                            let app_handle_clone2 = app_handle_clone.clone();
+                            let module_name = module.game_name().to_string();
+                            
+                            let (xbl_stop_tx, mut xbl_stop_rx) = tokio::sync::mpsc::channel::<()>(1);
+                            
+                            tauri::async_runtime::spawn(async move {
+                                let mut last_poll = tokio::time::Instant::now().checked_sub(Duration::from_secs(26)).unwrap();
+                                loop {
+                                    tokio::select! {
+                                        _ = xbl_stop_rx.recv() => break,
+                                        _ = tokio::time::sleep(Duration::from_millis(1000)) => {}
+                                    }
+                                    
+                                    if last_poll.elapsed() >= Duration::from_secs(26) {
+                                        let key = key_clone.lock().unwrap().clone();
+                                        if !key.is_empty() {
+                                            if let Some(status) = xbl::poll_xbl_presence(&key).await {
+                                                *xbl_status_clone_loop.lock().unwrap() = Some(status.clone());
+                                                let _ = app_handle_clone2.emit("status_update", serde_json::json!({
+                                                    "status": "connected",
+                                                    "game": module_name,
+                                                    "details": "Broadcasting presence...",
+                                                    "xbl_status": status
+                                                }));
+                                            }
+                                        } else {
+                                            *xbl_status_clone_loop.lock().unwrap() = None;
+                                        }
+                                        last_poll = tokio::time::Instant::now();
+                                    }
+                                }
+                            });
                             
                             // Spawn Discord updater loop
                             let db_clone = db.clone();
@@ -298,12 +345,15 @@ fn main() {
                             
                             tauri::async_runtime::spawn(async move {
                                 let mut last_update = tokio::time::Instant::now();
+                                // Bind the xbl_stop_tx to this loop's lifetime so it drops when this breaks
+                                let _stop_tx = xbl_stop_tx; 
                                 loop {
                                     match rx_clone.recv().await {
                                         Ok(data) => {
-                                            if last_update.elapsed() >= Duration::from_millis(2000) {
+                                            if last_update.elapsed() >= Duration::from_millis(1500) {
                                                 let db_lock = db_clone.lock().unwrap();
-                                                discord_service.update_presence(&data, &db_lock, module_clone.as_ref());
+                                                let xbl_lock = xbl_status.lock().unwrap();
+                                                discord_service.update_presence(&data, &db_lock, module_clone.as_ref(), xbl_lock.as_deref());
                                                 last_update = tokio::time::Instant::now();
                                             }
                                         }
@@ -353,7 +403,8 @@ fn main() {
             is_autostart_enabled,
             hide_window,
             show_window,
-            ui_ready
+            ui_ready,
+            update_xbl_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

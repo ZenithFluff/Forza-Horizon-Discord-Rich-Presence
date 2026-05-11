@@ -150,7 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Listen for status updates from Rust backend
   listen("status_update", (event) => {
-    const { status, game, details } = event.payload;
+    const { status, game, details, xbl_status } = event.payload;
 
     if (status === "connected") {
       pulseDot.classList.add("active");
@@ -160,6 +160,12 @@ document.addEventListener("DOMContentLoaded", () => {
       statusText.textContent = `${game}`;
       statusText.style.color = "var(--success-color)";
       statusDetail.textContent = details || "Broadcasting presence to Discord.";
+      
+      const xblText = document.getElementById("xbl-status-text");
+      if (xbl_status) {
+        xblText.textContent = xbl_status;
+        xblText.style.color = "var(--success-color)";
+      }
     } else {
       pulseDot.classList.remove("active");
       pulseDot.classList.remove("active-pulse");
@@ -168,9 +174,44 @@ document.addEventListener("DOMContentLoaded", () => {
       statusText.textContent = "Waiting...";
       statusText.style.color = "inherit";
       statusDetail.textContent = details || "Launch game to broadcast";
+      
+      const xblText = document.getElementById("xbl-status-text");
+      xblText.textContent = "Waiting for game...";
+      xblText.style.color = "inherit";
     }
   }).then(() => {
-    // Tell backend we are ready to receive initial status
+    // Load XBL Api Key
+    const xblKeyInput = document.getElementById("xbl-api-key");
+    const saveXblBtn = document.getElementById("save-xbl-btn");
+    let savedXblKey = localStorage.getItem("xbl_api_key") || "";
+    xblKeyInput.value = savedXblKey;
+
+    if (savedXblKey) {
+      document.getElementById("xbl-status-text").textContent = "Key loaded";
+    }
+
+    saveXblBtn.addEventListener("click", async () => {
+      saveXblBtn.disabled = true;
+      const key = xblKeyInput.value.trim();
+      localStorage.setItem("xbl_api_key", key);
+      
+      try {
+        await invoke("update_xbl_settings", { apiKey: key });
+        saveXblBtn.textContent = "Saved!";
+        document.getElementById("xbl-status-text").textContent = key ? "Key saved" : "Disconnected";
+      } catch (err) {
+        console.error(err);
+        saveXblBtn.textContent = "Error";
+      }
+      
+      setTimeout(() => {
+        saveXblBtn.textContent = "Save";
+        saveXblBtn.disabled = false;
+      }, 2000);
+    });
+
+    // Tell backend we are ready to receive initial status and send initial key
     invoke("ui_ready").catch(console.error);
+    invoke("update_xbl_settings", { apiKey: savedXblKey }).catch(console.error);
   });
 });

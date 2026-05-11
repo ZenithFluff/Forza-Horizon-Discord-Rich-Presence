@@ -42,32 +42,61 @@ impl DiscordService {
         }
     }
 
-    pub fn update_presence(&self, data: &TelemetryData, db: &CarDatabase, module: &dyn GameModule) {
+    pub fn update_presence(&self, data: &TelemetryData, db: &CarDatabase, module: &dyn GameModule, xbl_state: Option<&str>) {
         let mut lock = self.client.lock().unwrap();
         if let Some(client) = lock.as_mut() {
-            if data.is_race_on == 0 {
-                // In menus
-                let activity = activity::Activity::new()
-                    .state("In Menus")
-                    .assets(activity::Assets::new().large_image("menu_icon"))
-                    .timestamps(activity::Timestamps::new().start(self.start_time));
-                let _ = client.set_activity(activity);
-                return;
+            let car_name = db.get_car_name(data.car_ordinal);
+            let display_name = if car_name.chars().count() > 25 {
+                let truncated: String = car_name.chars().take(22).collect();
+                format!("{}...", truncated)
+            } else {
+                car_name.clone()
+            };
+
+            let class_str = module.format_class(data.car_class);
+            // let telemetry_str = format!("{} | {:.0} km/h | Class {} ({})", car_name, data.speed_kmh.abs(), class_str, data.car_pi);
+            let telemetry_str = format!("{} | {} ({})", display_name, class_str, data.car_pi);
+
+            let mut details_str = String::new(); // Top line
+            let mut state_str = String::new();   // Bottom line
+
+            if let Some(xbl) = xbl_state {
+                // OpenXBL goes to the top
+                details_str = xbl.to_string();
+                
+                if data.is_race_on != 0 {
+                    // Telemetry goes to the bottom
+                    state_str = telemetry_str;
+                }
+            } else {
+                // No OpenXBL fallback
+                if data.is_race_on != 0 {
+                    details_str = display_name.clone();
+                    // state_str = format!("{:.0} km/h | Class {} ({})", data.speed_kmh.abs(), class_str, data.car_pi);
+                    state_str = format!("{} ({})", class_str, data.car_pi);
+                }
+                // If is_race_on == 0, we leave both empty (no "In Menus")
             }
 
-            let car_name = db.get_car_name(data.car_ordinal);
-            let class_str = module.format_class(data.car_class);
-            
-            let details = format!("{}", car_name);
-            let state = format!("{:.0} km/h | Class {} ({})", data.speed_kmh.abs(), class_str, data.car_pi);
-
-            let payload = activity::Activity::new()
-                .details(&details)
-                .state(&state)
-                .assets(activity::Assets::new()
-                    .large_image("car_default") // In a real app, you could map car IDs to asset keys
-                    .large_text(&car_name))
+            let mut payload = activity::Activity::new()
                 .timestamps(activity::Timestamps::new().start(self.start_time));
+
+            if !details_str.is_empty() {
+                payload = payload.details(&details_str);
+            }
+            
+            if !state_str.is_empty() {
+                payload = payload.state(&state_str);
+            }
+
+            // Assets logic
+            if data.is_race_on == 0 {
+                payload = payload.assets(activity::Assets::new().large_image("menu_icon"));
+            } else {
+                payload = payload.assets(activity::Assets::new()
+                    .large_image("car_default")
+                    .large_text(&car_name));
+            }
 
             let _ = client.set_activity(payload);
         }
