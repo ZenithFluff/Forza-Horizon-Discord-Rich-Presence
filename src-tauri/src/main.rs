@@ -298,6 +298,7 @@ fn main() {
                 
                 let mut is_game_running = false;
                 let mut active_discord: Option<Arc<DiscordService>> = None;
+                let mut active_discord_stop: Option<tokio::sync::mpsc::Sender<()>> = None;
 
                 loop {
                     sys.refresh_processes_specifics(sysinfo::ProcessRefreshKind::new());
@@ -344,6 +345,7 @@ fn main() {
                             let module_name = module.game_name().to_string();
                             
                             let (xbl_stop_tx, mut xbl_stop_rx) = tokio::sync::mpsc::channel::<()>(1);
+                            let (discord_stop_tx, mut discord_stop_rx) = tokio::sync::mpsc::channel::<()>(1);
                             
                             tauri::async_runtime::spawn(async move {
                                 let mut last_poll = tokio::time::Instant::now().checked_sub(Duration::from_secs(26)).unwrap();
@@ -399,11 +401,12 @@ fn main() {
                             
                             tauri::async_runtime::spawn(async move {
                                 let mut last_update = tokio::time::Instant::now();
-                                // Bind the xbl_stop_tx to this loop's lifetime so it drops when this breaks
+                                // Dropping xbl_stop_tx when this loop exits will also stop the XBL poller
                                 let _stop_tx = xbl_stop_tx; 
                                 let mut last_telemetry: Option<TelemetryData> = None;
                                 loop {
                                     tokio::select! {
+                                        _ = discord_stop_rx.recv() => break,
                                         recv_result = rx_clone.recv() => {
                                             match recv_result {
                                                 Ok(data) => {
@@ -428,6 +431,7 @@ fn main() {
                                     }
                                 }
                             });
+                            active_discord_stop = Some(discord_stop_tx);
                         }
                     } else if is_game_running {
                         // Game stopped
@@ -436,7 +440,9 @@ fn main() {
                         println!("Game stopped.");
                         
                         telemetry_server_clone.stop();
-                        *telemetry_tx_clone.lock().unwrap() = None; // Drops the sender, terminating the updater loop
+                        *telemetry_tx_clone.lock().unwrap() = None;
+                        // Drop stop sender to signal the discord updater loop to exit
+                        drop(active_discord_stop.take());
                         if let Some(discord) = active_discord.take() {
                             discord.disconnect();
                         }
