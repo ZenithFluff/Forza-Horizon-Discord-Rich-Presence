@@ -6,7 +6,7 @@
 
 **Forza Horizon 4** ✅ Supported
 
-<img src="assets/fh4status.png" width="45%" alt="Discord Status Example" />
+<img src="assets/fh4status.png" width="50%" alt="Discord Status Example" />
 
 ## Setup Guide
 
