@@ -267,6 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     relayActiveToggle.checked = relayActive;
 
     // Helper: dim/enable the IP+port fields based on toggle state
+    // Also toggle the 'active' (spinning) class on the gear button
     function updateFieldsState(active) {
       const rows = udpForwardPanel.querySelectorAll(".udp-forward-row");
       rows.forEach(row => {
@@ -276,6 +277,13 @@ document.addEventListener("DOMContentLoaded", () => {
           row.classList.add("udp-fields-disabled");
         }
       });
+
+      // Gear button spins if relay is actually active
+      if (active) {
+        udpForwardBtn.classList.add("active");
+      } else {
+        udpForwardBtn.classList.remove("active");
+      }
     }
     updateFieldsState(relayActive);
 
@@ -297,7 +305,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Restore panel visibility + window height
     if (relayEnabled) {
       udpForwardPanel.classList.remove("hidden");
-      udpForwardBtn.classList.add("active");
       // Measure panel height after it becomes visible, then expand window
       requestAnimationFrame(() => {
         const panelH = udpForwardPanel.offsetHeight;
@@ -305,7 +312,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Gear button toggle
+    // Gear button toggle (only controls visibility/window size now)
     udpForwardBtn.addEventListener("click", () => {
       const isOpen = !udpForwardPanel.classList.contains("hidden");
       if (isOpen) {
@@ -313,21 +320,15 @@ document.addEventListener("DOMContentLoaded", () => {
         setWindowHeight(BASE_HEIGHT).then(() => {
           udpForwardPanel.classList.add("hidden");
         });
-        udpForwardBtn.classList.remove("active");
         localStorage.setItem("relay_enabled", "false");
-        // Disable relay when panel is closed
-        invoke("update_relay_ports", { targets: [] }).catch(console.error);
       } else {
         // Expand: show panel, then measure and grow window
         udpForwardPanel.classList.remove("hidden");
-        udpForwardBtn.classList.add("active");
         localStorage.setItem("relay_enabled", "true");
         requestAnimationFrame(() => {
           const panelH = udpForwardPanel.offsetHeight;
           setWindowHeight(BASE_HEIGHT + panelH + 25);
         });
-        // Apply current values only if toggle is on
-        if (relayActiveToggle.checked) applyRelaySettings();
       }
     });
 
@@ -347,6 +348,26 @@ document.addEventListener("DOMContentLoaded", () => {
       const ip = relayIpInput.value.trim() || "127.0.0.1";
       const port = parseInt(relayPortInput.value) || 8000;
       if (port < 1 || port > 65535) return;
+
+      // Prevent infinite UDP loop
+      const telemetryPort = parseInt(document.getElementById("telemetry-port").value) || 8001;
+      const isLocalhost = ip === "127.0.0.1" || ip === "localhost" || ip === "0.0.0.0";
+      if (isLocalhost && port === telemetryPort) {
+        console.error("Infinite loop prevented: Cannot forward to the same telemetry port!");
+        
+        // Show visual feedback that this is invalid
+        relayPortInput.style.borderColor = "var(--error-color, #ff4d4d)";
+        setTimeout(() => relayPortInput.style.borderColor = "", 2000);
+        
+        // Force toggle off and disable relay
+        if (relayActiveToggle.checked) {
+          relayActiveToggle.checked = false;
+          localStorage.setItem("relay_active", "false");
+          updateFieldsState(false);
+          invoke("update_relay_ports", { targets: [] }).catch(console.error);
+        }
+        return;
+      }
 
       try {
         await invoke("update_relay_ports", { targets: [{ ip, port }] });
@@ -375,8 +396,8 @@ document.addEventListener("DOMContentLoaded", () => {
     invoke("ui_ready").catch(console.error);
     invoke("update_xbl_settings", { apiKey: savedXblKey }).catch(console.error);
     invoke("update_telemetry_port", { port: parseInt(savedPort) || 8001 }).catch(console.error);
-    // Apply saved relay settings on startup if panel is open AND toggle is on
-    if (relayEnabled && relayActive) {
+    // Apply saved relay settings on startup if toggle is on (even if panel is closed)
+    if (relayActive) {
       applyRelaySettings().catch(console.error);
     }
   });
