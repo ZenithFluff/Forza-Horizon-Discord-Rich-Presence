@@ -16,11 +16,29 @@ pub async fn poll_xbl_presence(api_key: &str) -> Result<String, String> {
     headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US"));
 
     let client = reqwest::Client::new();
-    let res = client.get("https://xbl.io/api/v2/presence")
-        .headers(headers)
+    let direct_url = "https://xbl.io/api/v2/presence";
+    let proxy_url = "https://forza-xbl-proxy.vercel.app/api/presence";
+
+    // Try direct connection first
+    let mut res = client.get(direct_url)
+        .headers(headers.clone())
         .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+        .await;
+
+    // Fallback to proxy if direct connection fails or is blocked (403)
+    let is_blocked = match &res {
+        Ok(response) => response.status().as_u16() == 403,
+        Err(_) => true, // Network error/timeout
+    };
+
+    if is_blocked {
+        res = client.get(proxy_url)
+            .headers(headers)
+            .send()
+            .await;
+    }
+
+    let res = res.map_err(|e| format!("Network error: {}", e))?;
 
     if res.status() == 401 {
         return Err("Error: Invalid API Key".to_string());
