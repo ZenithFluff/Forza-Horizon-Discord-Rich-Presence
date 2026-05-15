@@ -1,6 +1,8 @@
 # Forza Horizon Discord Rich Presence
 
-**Forza Horizon 6** ✅ Supported ⚠️ Needs a proper database with cars. Use without telemetry for now
+**Forza Horizon 6** ✅ Supported
+
+<img src="assets/fh6status.png" width="50%" alt="Discord Status Example" />
 
 **Forza Horizon 5** ✅ Supported
 
@@ -36,6 +38,9 @@ Windows blocks UWP apps from sending data to local programs. If you play the Mic
 - **OpenXBL:** Update frequency is optimized to preserve your free API limits.
 - **100% Safe:** No game file modifications or memory hooking/reading involved.
 
+## Reporting Unknown Cars
+ ⚠️ In Forza Horizon 6 some cars are not recognized because I don't have the database for them yet.
+ Please consider report missing cars directly in app to help speed up the process.
 ## Acknowledgements
 
 - **CringeGaming** — for testing assistance during development
